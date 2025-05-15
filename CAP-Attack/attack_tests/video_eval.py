@@ -24,10 +24,10 @@ CHUNKS_DIRECTORY = '../data/'
 RESULTS_DIRECTORY = 'results/vid_test1/'
 verbose = 0
 
-# -------------- Auto-PGD 攻击函数 --------------
+
 def auto_pgd_attack(
-    proc_images,  # 原始图像(YUV)列表，长度=2
-    patch,        # 初始 patch, shape 与 random patch 相同
+    proc_images,  
+    patch,        
     h_bounds, w_bounds, 
     model_torch, model_onnx,
     desire, traffic_convention,
@@ -37,27 +37,27 @@ def auto_pgd_attack(
     alpha=0.75,
     thres=3
 ):
-    # 为避免跨迭代计算图问题，先将 rec_state 脱钩
+
     rec_state_torch = rec_state_torch.detach()
-    # 初始化扰动 x0
+
     x0 = patch.clone().detach().requires_grad_(True)
     
-    # 第一次前向与反向传播，得到 x1
+
     tmp_pimgs = torch.tensor(np.array(copy.deepcopy(proc_images))).float()
     tmp_pimgs[:, h_bounds[0]:h_bounds[1], w_bounds[0]:w_bounds[1]] += x0
     tmp_parsed = parse_image_multi(tmp_pimgs)
     input_imgs = tmp_parsed.reshape(1, 12, 128, 256)
     drel, _ = estimate_torch(model_torch, input_imgs, desire, traffic_convention, rec_state_torch)
-    drel[0].backward()  # 第一次 backward
+    drel[0].backward()  #
     grad = x0.grad
     x1 = x0 + step_size * torch.sign(grad)
     x1 = torch.clip(x1, -thres, thres)
     
-    # 记录当前最佳解
+
     tmp_best = x0.clone().detach()
     tmp_best_score = drel[0].item()
     
-    # 第二次前向计算，获得 x1 的目标分数
+ 
     tmp_pimgs2 = torch.tensor(np.array(copy.deepcopy(proc_images))).float()
     tmp_pimgs2[:, h_bounds[0]:h_bounds[1], w_bounds[0]:w_bounds[1]] += x1
     tmp_parsed2 = parse_image_multi(tmp_pimgs2)
@@ -68,7 +68,7 @@ def auto_pgd_attack(
         tmp_best = x1.clone().detach()
         tmp_best_score = score_x1
 
-    # 主循环：迭代更新扰动
+
     x_km1 = x0.clone().detach()
     x_k = x1.clone().detach().requires_grad_(True)
     for k in range(1, num_steps):
@@ -342,7 +342,7 @@ def analyze_video(video_path, video_id):
         parsed_images.append(parsed)
 
         if len(parsed_images) >= 2:
-            # ========== 1) 无攻击推理 ==========
+
             input_imgs = np.array(parsed_images).astype('float32')
             input_imgs.resize((1, 12, 128, 256))
             torch_drel, torch_rec_state = estimate_torch(torch_model, input_imgs, desire, traffic_convention, torch_rec_state)
@@ -357,10 +357,10 @@ def analyze_video(video_path, video_id):
             if verbose > 1:
                 print('Lead car rel dist, no patch: {}'.format(torch_drel[0]))
 
-            # ========== 2) Gaussian Noise 攻击 ==========
+
             tmp_gauss_imgs = copy.deepcopy(proc_images)
             tmp_gauss_imgs = torch.tensor(np.array(tmp_gauss_imgs)).float()
-            gauss_std = 1.0  # 可调整标准差
+            gauss_std = 1.0  
             gauss_noise = torch.normal(mean=0.0, std=gauss_std, 
                                        size=(h_bounds[1]-h_bounds[0], w_bounds[1]-w_bounds[0]))
             tmp_gauss_imgs[:, h_bounds[0]:h_bounds[1], w_bounds[0]:w_bounds[1]] += gauss_noise
@@ -373,7 +373,7 @@ def analyze_video(video_path, video_id):
                 torch_gauss_drel_hist['dRel'+str(t)].append(torch_drel_gauss[j])
                 onnx_gauss_drel_hist['dRel'+str(t)].append(onnx_drel_gauss[j])
 
-            # ========== 3) Auto-PGD 攻击 ==========
+
             tmp_apgd_imgs = copy.deepcopy(proc_images)
             apgd_patch = torch.zeros((h_bounds[1]-h_bounds[0], w_bounds[1]-w_bounds[0]),
                                      dtype=torch.float32, requires_grad=True)
@@ -404,7 +404,7 @@ def analyze_video(video_path, video_id):
                 torch_apgd_drel_hist['dRel'+str(t)].append(torch_drel_apgd[j])
                 onnx_apgd_drel_hist['dRel'+str(t)].append(onnx_drel_apgd[j])
 
-            # ========== 4) Random Patch / FGSM / Optimized Patch  ==========
+
             patch = torch.tensor(patch, requires_grad=True)
             adam = AdamOptTorch(patch.shape, lr=1)
             for it in range(mask_iterations):
@@ -482,7 +482,7 @@ def analyze_video(video_path, video_id):
     cap.release()
     cv2.destroyAllWindows()
 
-# --------------------- 以下为结果统计与展示部分 ---------------------
+
 def collect_results_rmse(res_path, name_filter='', patch_type='init'):
     all_mse = []
     indiv_mse = {}

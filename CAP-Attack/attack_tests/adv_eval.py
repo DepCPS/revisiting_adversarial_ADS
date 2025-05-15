@@ -23,11 +23,11 @@ YOLO_WEIGHTS_PATH = "../models/weights/yolov8n.pt"
 RESULTS_DIRECTORY = 'results/png_test/'
 verbose = 0
 
-# -------------- 以下保持原有函数定义，不变 ------------------------------
+
 
 def auto_pgd_attack(
-    proc_images,  # 原始图像(YUV)列表，长度=2
-    patch,        # 初始 patch, shape 与 random patch 相同
+    proc_images,  
+    patch,        
     h_bounds, w_bounds, 
     model_torch, model_onnx,
     desire, traffic_convention,
@@ -37,7 +37,7 @@ def auto_pgd_attack(
     alpha=0.75,
     thres=3
 ):
-    # 攻击函数（本次不使用）
+    
     pass
 
 class AdamOptTorch:
@@ -125,7 +125,7 @@ def parse_image(frame):
     return parsed
 
 def parse_image_multi(frames):
-    n = frames.shape[0]  # 应该始终为2
+    n = frames.shape[0]  
     H = (frames.shape[1]*2)//3
     W = frames.shape[2]
     parsed = torch.zeros(size=(n, 6, H//2, W//2)).float()
@@ -160,45 +160,44 @@ def build_yuv_patch(thres, patch_dim, patch_start):
     w_bounds = (y_patch_w_start, y_patch_w_start + y_patch_width)
     return y_patch, h_bounds, w_bounds
 
-# ----------------- 以下为修改后的函数 -----------------
-# 从指定文件夹中读取 .png 图像，不进行任何攻击，直接将两帧输入模型预测
+
 
 def analyze_folder(folder_path):
-    # 加载模型（这里不需要 YOLO 模块，因为不做攻击）
+    
     onnx_model = onnxruntime.InferenceSession(ONNX_MODEL_PATH)
     torch_model = load_torch_model()
     
-    # 设置图像尺寸（与原代码保持一致）
+    
     width = 512
     height = 256
     dim = (width, height)
     
-    # 初始化其他模型输入（desire、traffic_convention、rec_state 等）
+    
     desire = np.zeros((1, 8), dtype='float32')
     traffic_convention = np.array([[1, 0]], dtype='float32')
     torch_rec_state = np.zeros((1, 512), dtype='float32')
     onnx_rec_state = np.zeros((1, 512), dtype='float32')
     
-    # 模型预测的时间时刻（单位：秒）
+    
     pred_times = [0, 2, 4, 6, 8, 10]
     
-    # 用于记录预测结果
+   
     torch_init_drel_hist = {'dRel0': [], 'dRel2': [], 'dRel4': [], 'dRel6': [], 'dRel8': [], 'dRel10': []}
     onnx_init_drel_hist = {'dRel0': [], 'dRel2': [], 'dRel4': [], 'dRel6': [], 'dRel8': [], 'dRel10': []}
     frame_hist = []
     rmse_hist = []
     
-    # 读取文件夹中所有 .png 文件，并按文件名排序
+    
     files = sorted([f for f in os.listdir(folder_path) if f.lower().endswith('.png')])
     if len(files) < 2:
-        print("指定文件夹中的图片不足两张，无法构造模型所需的两帧输入。")
+        print("There are not enough images in the specified folder to construct the two frames of input required by the model.")
         return
 
-    # 为保证输入格式，初始化两个列表存放原始 YUV 图像与解析后的图像
-    proc_images = []      # 用于存放原始 YUV 图像（形状应为 (384, 512)）
-    parsed_images = []    # 用于存放解析后的图像（形状为 (6, 128, 256)）
     
-    # 初始化时加入一个零数组，与原视频版本一致
+    proc_images = []      
+    parsed_images = []    
+    
+    
     proc_images.append(np.zeros((384, 512), dtype='float32'))
     parsed_images.append(np.zeros((6, 128, 256), dtype='float32'))
     
@@ -209,24 +208,24 @@ def analyze_folder(folder_path):
         img = cv2.imread(file_path)
         if img is None:
             continue
-        # 调整尺寸并转换为 YUV_I420 格式
+        
         img = cv2.resize(img, dim)
         img_yuv = cv2.cvtColor(img, cv2.COLOR_BGR2YUV_I420).astype('float32')
         
-        # 记录原始图像
+        
         proc_images.append(img_yuv)
-        # 对图像进行解析
+        
         parsed = parse_image(img_yuv)
         parsed_images.append(parsed)
         
-        # 当累积的解析图像数达到2时，取最近两帧进行预测
+        
         if len(parsed_images) >= 2:
-            # 取最后两帧构造输入
+            
             input_imgs = np.array(parsed_images[-2:]).astype('float32')
-            # reshape 成 (1, 12, 128, 256)
+            # reshape  (1, 12, 128, 256)
             input_imgs = input_imgs.reshape(1, 12, 128, 256)
             
-            # 无攻击推理
+            
             torch_drel, torch_rec_state = estimate_torch(torch_model, input_imgs, desire, traffic_convention, torch_rec_state)
             onnx_drel, onnx_rec_state = estimate_onnx(onnx_model, input_imgs, desire, traffic_convention, onnx_rec_state)
             
@@ -239,7 +238,7 @@ def analyze_folder(folder_path):
             frame_hist.append(frame_idx)
             print(f'Frame {frame_idx}: Torch dRel0 = {torch_drel[0]}, ONNX dRel0 = {onnx_drel[0]}, RMSE = {rmse}')
     
-    # 记录结果至 CSV 文件
+    #  CSV 
     data = {}
     data['Frame'] = frame_hist
     for t in pred_times:
@@ -247,20 +246,20 @@ def analyze_folder(folder_path):
         data['ONNX_dRel'+str(t)] = onnx_init_drel_hist['dRel'+str(t)]
     data['ONNX_Torch_RMSE'] = rmse_hist
     
-    # 将结果保存到指定文件夹下的 CSV 文件中
+    
     if not os.path.exists(RESULTS_DIRECTORY):
         os.makedirs(RESULTS_DIRECTORY)
     output_csv = os.path.join(RESULTS_DIRECTORY, 'predictions_from_png.csv')
     df = pd.DataFrame(data=data)
     df.to_csv(output_csv, index=False)
-    print(f'预测结果已保存至: {output_csv}')
+    print(f'Saved to: {output_csv}')
 
-# --------------------- 主程序入口 ---------------------
+
 if __name__ == '__main__':
     import argparse
-    parser = argparse.ArgumentParser(description="从指定文件夹读取 .png 图像，直接输入模型进行预测（无攻击）")
-    parser.add_argument('--folder', type=str, required=True, help="存放 .png 图像的文件夹路径")
-    parser.add_argument('--verbose', type=int, default=0, help="详细信息输出级别")
+    parser = argparse.ArgumentParser(description="Read .png images from the specified folder and directly input them into the model for prediction (without attack)")
+    parser.add_argument('--folder', type=str, required=True, help="The path to the folder where the .png images are stored")
+    parser.add_argument('--verbose', type=int, default=0, help="Verbose output level")
     args = parser.parse_args()
     
     verbose = args.verbose

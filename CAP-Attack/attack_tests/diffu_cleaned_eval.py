@@ -7,7 +7,7 @@ import pandas as pd
 import copy
 from datetime import datetime
 
-# 添加模型所在路径，保证能正确导入 OpenPilotModel
+
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'models'))
 from openpilot_torch import OpenPilotModel
 
@@ -20,7 +20,7 @@ def load_torch_model():
     return model
 
 def parse_image_multi(frames):
-    n = frames.shape[0]  # 应该为2（连续两帧）
+    n = frames.shape[0]  
     H = (frames.shape[1] * 2) // 3
     W = frames.shape[2]
     parsed = torch.zeros((n, 6, H // 2, W // 2), dtype=torch.float32)
@@ -59,7 +59,7 @@ def estimate_torch(model, input_imgs, desire, traffic_convention, recurrent_stat
 def process_image_pairs(clean_folder, attacked_folder, output_csv):
     clean_files = sorted([f for f in os.listdir(clean_folder) if f.endswith('.png')])
     if len(clean_files) == 0:
-        print("未找到干净图像。")
+        print("No clean images found.")
         return
 
     results = {
@@ -78,7 +78,7 @@ def process_image_pairs(clean_folder, attacked_folder, output_csv):
     attacked_buffer = []
     frame_ids = []
     
-    # 保持与原始代码一致：resize 到 (512,256)（宽×高）
+
     resize_dim = (512, 256)
     
     for file in clean_files:
@@ -94,7 +94,7 @@ def process_image_pairs(clean_folder, attacked_folder, output_csv):
         attacked_path = os.path.join(attacked_folder, attacked_name)
         attacked_img = cv2.imread(attacked_path)
         if attacked_img is None:
-            print("未找到攻击后图像：", attacked_path)
+            print("Post-attack image not found:", attacked_path)
             continue
         attacked_img = cv2.resize(attacked_img, resize_dim)
         attacked_img_yuv = cv2.cvtColor(attacked_img, cv2.COLOR_BGR2YUV_I420).astype('float32')
@@ -116,11 +116,11 @@ def process_image_pairs(clean_folder, attacked_folder, output_csv):
             clean_parsed = parse_image_multi(clean_stack)
             attacked_parsed = parse_image_multi(attacked_stack)
             
-            # 保证 reshape 的总元素数正确：2*6*128*256 = 393216
+
             clean_input = clean_parsed.reshape(1, 12, 128, 256).numpy()
             attacked_input = attacked_parsed.reshape(1, 12, 128, 256).numpy()
             
-            # 使用 no_grad 以减少内存消耗
+            # Use no_grad to reduce memory usage
             with torch.no_grad():
                 clean_preds, rec_state = estimate_torch(model, clean_input, desire, traffic_convention, rec_state)
                 attacked_preds, rec_state = estimate_torch(model, attacked_input, desire, traffic_convention, rec_state)
@@ -140,13 +140,13 @@ def process_image_pairs(clean_folder, attacked_folder, output_csv):
     
     df = pd.DataFrame(results)
     df.to_csv(output_csv, index=False)
-    print("预测结果已保存到:", output_csv)
+    print("The prediction results have been saved to:", output_csv)
     
     df['Clean_dRel0_float'] = df['Clean_dRel0'].apply(lambda x: float(x))
     df['Deviation_float'] = df['Deviation'].apply(lambda x: float(x))
     
     bounds = [0, 20, 40, 60, 80, 999]
-    print("\n不同距离范围内（基于干净图像预测值）的平均误差（攻击后预测 - 干净预测）：")
+    print("\nAverage error (post-attack prediction - clean prediction) at different distance ranges (based on clean image prediction)：")
     for i in range(1, len(bounds)):
         lower = bounds[i - 1]
         upper = bounds[i]
@@ -156,11 +156,11 @@ def process_image_pairs(clean_folder, attacked_folder, output_csv):
             avg_dev = df_bin['Deviation_float'].mean()
             print(f"{bin_label}: {avg_dev}")
         else:
-            print(f"{bin_label}: 无数据")
+            print(f"{bin_label}: No data")
 
 if __name__ == '__main__':
-    clean_folder = "results/vid_test1/chunk_3/clean"         # 干净图像文件夹（例如 video1_frame1.png）
-    attacked_folder = "image_processing_results/result_gauss/randomization"     # 攻击后图像文件夹（例如 video1_frame1_diffusion_ffhq_10m.png）
-    output_csv = "image_processing_results/results/gauss_randomization_results.csv"          # CSV 结果保存路径
+    clean_folder = "results/vid_test1/chunk_3/clean"         # clean image folder（suchk as: video1_frame1.png）
+    attacked_folder = "image_processing_results/result_gauss/randomization"     # Post-attack image folder（such as: video1_frame1_diffusion_ffhq_10m.png）
+    output_csv = "image_processing_results/results/gauss_randomization_results.csv"          # CSV result path
     
     process_image_pairs(clean_folder, attacked_folder, output_csv)

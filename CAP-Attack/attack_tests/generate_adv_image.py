@@ -24,10 +24,10 @@ CHUNKS_DIRECTORY = '../data/'
 RESULTS_DIRECTORY = 'results/vid_test1/'
 verbose = 0
 
-# -------------- Auto-PGD 攻击函数 --------------
+# -------------- Auto-PGD --------------
 def auto_pgd_attack(
-    proc_images,  # 原始图像(YUV)列表，长度=2
-    patch,        # 初始 patch, shape 与 random patch 相同
+    proc_images,  
+    patch,        
     h_bounds, w_bounds, 
     model_torch, model_onnx,
     desire, traffic_convention,
@@ -37,27 +37,27 @@ def auto_pgd_attack(
     alpha=0.75,
     thres=3
 ):
-    # 为避免跨迭代计算图问题，先将 rec_state 脱钩
+
     rec_state_torch = rec_state_torch.detach()
-    # 初始化扰动 x0
+
     x0 = patch.clone().detach().requires_grad_(True)
     
-    # 第一次前向与反向传播，得到 x1
+
     tmp_pimgs = torch.tensor(np.array(copy.deepcopy(proc_images))).float()
     tmp_pimgs[:, h_bounds[0]:h_bounds[1], w_bounds[0]:w_bounds[1]] += x0
     tmp_parsed = parse_image_multi(tmp_pimgs)
     input_imgs = tmp_parsed.reshape(1, 12, 128, 256)
     drel, _ = estimate_torch(model_torch, input_imgs, desire, traffic_convention, rec_state_torch)
-    drel[0].backward()  # 第一次 backward
+    drel[0].backward()  # first backward
     grad = x0.grad
     x1 = x0 + step_size * torch.sign(grad)
     x1 = torch.clip(x1, -thres, thres)
     
-    # 记录当前最佳解
+
     tmp_best = x0.clone().detach()
     tmp_best_score = drel[0].item()
     
-    # 第二次前向计算，获得 x1 的目标分数
+
     tmp_pimgs2 = torch.tensor(np.array(copy.deepcopy(proc_images))).float()
     tmp_pimgs2[:, h_bounds[0]:h_bounds[1], w_bounds[0]:w_bounds[1]] += x1
     tmp_parsed2 = parse_image_multi(tmp_pimgs2)
@@ -68,7 +68,7 @@ def auto_pgd_attack(
         tmp_best = x1.clone().detach()
         tmp_best_score = score_x1
 
-    # 主循环：迭代更新扰动
+
     x_km1 = x0.clone().detach()
     x_k = x1.clone().detach().requires_grad_(True)
     for k in range(1, num_steps):
@@ -272,7 +272,7 @@ def analyze_video(video_path, video_id):
     torch_fgsm_drel_hist = copy.deepcopy(torch_init_drel_hist)
     onnx_fgsm_drel_hist = copy.deepcopy(torch_init_drel_hist)
 
-    # 新增：Gaussian Noise 与 Auto-PGD 记录
+    # Gaussian Noise and Auto-PGD 
     torch_gauss_drel_hist = copy.deepcopy(torch_init_drel_hist)
     onnx_gauss_drel_hist = copy.deepcopy(torch_init_drel_hist)
     torch_apgd_drel_hist = copy.deepcopy(torch_init_drel_hist)
@@ -284,7 +284,7 @@ def analyze_video(video_path, video_id):
     patch_h_hist = []
     patch_w_hist = []
 
-    ### 设置保存攻击后图像的目录 ###
+    ### Set the directory to save the attack images ###
     chunk_dir = os.path.join(RESULTS_DIRECTORY, f'chunk_{chunk}')
     save_dir_gauss = os.path.join(chunk_dir, 'gauss')
     save_dir_apgd = os.path.join(chunk_dir, 'apgd')
@@ -353,7 +353,7 @@ def analyze_video(video_path, video_id):
         parsed_images.append(parsed)
 
         if len(parsed_images) >= 2:
-            # ========== 1) 无攻击推理 ==========
+
             input_imgs = np.array(parsed_images).astype('float32')
             input_imgs.resize((1, 12, 128, 256))
             torch_drel, torch_rec_state = estimate_torch(torch_model, input_imgs, desire, traffic_convention, torch_rec_state)
@@ -368,10 +368,10 @@ def analyze_video(video_path, video_id):
             if verbose > 1:
                 print('Lead car rel dist, no patch: {}'.format(torch_drel[0]))
 
-            # ========== 2) Gaussian Noise 攻击 ==========
+
             tmp_gauss_imgs = copy.deepcopy(proc_images)
             tmp_gauss_imgs = torch.tensor(np.array(tmp_gauss_imgs)).float()
-            gauss_std = 1.0  # 可调整标准差
+            gauss_std = 1.0  
             gauss_noise = torch.normal(mean=0.0, std=gauss_std, 
                                        size=(h_bounds[1]-h_bounds[0], w_bounds[1]-w_bounds[0]))
             tmp_gauss_imgs[:, h_bounds[0]:h_bounds[1], w_bounds[0]:w_bounds[1]] += gauss_noise
@@ -383,13 +383,13 @@ def analyze_video(video_path, video_id):
             for j, t in enumerate(pred_times):
                 torch_gauss_drel_hist['dRel'+str(t)].append(torch_drel_gauss[j])
                 onnx_gauss_drel_hist['dRel'+str(t)].append(onnx_drel_gauss[j])
-            # 保存 Gaussian Noise 攻击后的图像（取最新一帧，proc_images中索引1）
+
             gauss_frame = tmp_gauss_imgs[1].detach().cpu().numpy()
             gauss_frame = np.clip(gauss_frame, 0, 255).astype(np.uint8)
             gauss_bgr = cv2.cvtColor(gauss_frame, cv2.COLOR_YUV2BGR_I420)
             cv2.imwrite(os.path.join(save_dir_gauss, f'video{video_id}_frame{frame_idx}.png'), gauss_bgr)
 
-            # ========== 3) Auto-PGD 攻击 ==========
+
             tmp_apgd_imgs = copy.deepcopy(proc_images)
             apgd_patch = torch.zeros((h_bounds[1]-h_bounds[0], w_bounds[1]-w_bounds[0]),
                                      dtype=torch.float32, requires_grad=True)
@@ -419,21 +419,21 @@ def analyze_video(video_path, video_id):
             for j, t in enumerate(pred_times):
                 torch_apgd_drel_hist['dRel'+str(t)].append(torch_drel_apgd[j])
                 onnx_apgd_drel_hist['dRel'+str(t)].append(onnx_drel_apgd[j])
-            # 保存 Auto-PGD 攻击后的图像
+
             apgd_frame = tmp_apgd_imgs[1].detach().cpu().numpy()
             apgd_frame = np.clip(apgd_frame, 0, 255).astype(np.uint8)
             apgd_bgr = cv2.cvtColor(apgd_frame, cv2.COLOR_YUV2BGR_I420)
             cv2.imwrite(os.path.join(save_dir_apgd, f'video{video_id}_frame{frame_idx}.png'), apgd_bgr)
 
-            # ========== 4) Random Patch / FGSM / Optimized Patch  ==========
+
             patch_tensor = torch.tensor(patch, requires_grad=True)
             adam = AdamOptTorch(patch_tensor.shape, lr=1)
             for it in range(mask_iterations):
                 if it == 1:
-                    # 先计算 FGSM 攻击的图像，并保存
+
                     fgsm_tmp = torch.tensor(np.array(copy.deepcopy(proc_images))).float()
                     fgsm_tmp[:, h_bounds[0]:h_bounds[1], w_bounds[0]:w_bounds[1]] += fgsm_patch
-                    # 保存 FGSM 攻击后的图像（取最新一帧）
+
                     fgsm_frame = fgsm_tmp[1].detach().cpu().numpy()
                     fgsm_frame = np.clip(fgsm_frame, 0, 255).astype(np.uint8)
                     fgsm_bgr = cv2.cvtColor(fgsm_frame, cv2.COLOR_YUV2BGR_I420)
@@ -482,7 +482,7 @@ def analyze_video(video_path, video_id):
             if verbose > 1:
                 print('Lead car rel dist after {} updates: {}'.format(mask_iterations, onnx_drel[0]))
             mask_effect_hist.append(onnx_drel[0] - torch_drel_rand[0])
-            # 保存 OPT-based（最终优化后）的攻击图像：重新构造加扰后的图像
+
             tmp_pimgs_opt = torch.tensor(np.array(copy.deepcopy(proc_images))).float()
             tmp_pimgs_opt[:, h_bounds[0]:h_bounds[1], w_bounds[0]:w_bounds[1]] += patch_tensor
             opt_frame = tmp_pimgs_opt[1].detach().cpu().numpy()
@@ -518,7 +518,7 @@ def analyze_video(video_path, video_id):
     cap.release()
     cv2.destroyAllWindows()
 
-# --------------------- 以下为结果统计与展示部分 ---------------------
+
 def collect_results_rmse(res_path, name_filter='', patch_type='init'):
     all_mse = []
     indiv_mse = {}

@@ -37,27 +37,27 @@ def auto_pgd_attack(
     alpha=0.75,
     thres=3
 ):
-    # 为避免跨迭代计算图问题，先将 rec_state 脱钩
+
     rec_state_torch = rec_state_torch.detach()
-    # 初始化扰动 x0
+
     x0 = patch.clone().detach().requires_grad_(True)
     
-    # 第一次前向与反向传播，得到 x1
+
     tmp_pimgs = torch.tensor(np.array(copy.deepcopy(proc_images))).float()
     tmp_pimgs[:, h_bounds[0]:h_bounds[1], w_bounds[0]:w_bounds[1]] += x0
     tmp_parsed = parse_image_multi(tmp_pimgs)
     input_imgs = tmp_parsed.reshape(1, 12, 128, 256)
     drel, _ = estimate_torch(model_torch, input_imgs, desire, traffic_convention, rec_state_torch)
-    drel[0].backward()  # 第一次 backward
+    drel[0].backward()  
     grad = x0.grad
     x1 = x0 + step_size * torch.sign(grad)
     x1 = torch.clip(x1, -thres, thres)
     
-    # 记录当前最佳解
+
     tmp_best = x0.clone().detach()
     tmp_best_score = drel[0].item()
     
-    # 第二次前向计算，获得 x1 的目标分数
+
     tmp_pimgs2 = torch.tensor(np.array(copy.deepcopy(proc_images))).float()
     tmp_pimgs2[:, h_bounds[0]:h_bounds[1], w_bounds[0]:w_bounds[1]] += x1
     tmp_parsed2 = parse_image_multi(tmp_pimgs2)
@@ -68,7 +68,7 @@ def auto_pgd_attack(
         tmp_best = x1.clone().detach()
         tmp_best_score = score_x1
 
-    # 主循环：迭代更新扰动
+
     x_km1 = x0.clone().detach()
     x_k = x1.clone().detach().requires_grad_(True)
     for k in range(1, num_steps):
