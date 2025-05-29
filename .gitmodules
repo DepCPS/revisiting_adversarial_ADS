@@ -1,0 +1,3 @@
+[submodule "contrastive_learning"]
+	path = contrastive_learning
+	url = https://github.com/nafis-munir/Contrastive-Learning-for-Stop-Sign-detection.git
